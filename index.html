@@ -9,6 +9,125 @@
         <link rel="apple-touch-icon" href="icon/icon.png">
         <link rel="stylesheet" type="text/css" href="fonts/gamefont.css">
         <title>魔法少女苍蓝星</title>
+
+
+        <style>
+      /* ===== Cheat sidebar ===== */
+      #cheatPanel {
+        position: fixed;
+        top: 0;
+        right: -380px;                /* hidden */
+        width: 380px;
+        height: 100%;
+        background: rgba(17,17,17,.98);
+        color: #fff;
+        overflow-y: auto;
+        z-index: 99998;
+        padding: 12px 12px 20px 12px;
+        box-sizing: border-box;
+        transition: right .28s ease;
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        -webkit-overflow-scrolling: touch;
+        border-left: 1px solid rgba(255,255,255,.04);
+        pointer-events: auto;
+      }
+      #cheatPanel.open { right: 0; }
+      #cheatPanel h2 {
+        margin: 8px 0 10px;
+        font-size: 16px;
+        border-bottom: 1px solid #444;
+        padding-bottom: 6px;
+      }
+      #cheatClose {
+        position: sticky;
+        top: 0;
+        display: inline-block;
+        background: #333;
+        border: 1px solid #555;
+        color: #fff;
+        border-radius: 6px;
+        padding: 6px 10px;
+        margin-bottom: 8px;
+        cursor: pointer;
+        user-select: none;
+      }
+      #cheatTabs { margin-bottom:10px; display:flex; flex-wrap:wrap; gap:8px; }
+      #cheatTabs button {
+        margin-right: 6px;
+        margin-bottom: 6px;
+        background: #2a2a2a;
+        border: 1px solid #555;
+        color: #fff;
+        border-radius: 6px;
+        padding: 6px 10px;
+        cursor: pointer;
+        font-size:13px;
+        user-select: none;
+      }
+      #cheatPanel label { display:inline-block; width:120px; vertical-align:middle; }
+      #cheatPanel input[type="number"], #cheatPanel input[type="text"], #cheatPanel select { width:120px; margin-right:6px; padding:4px; box-sizing:border-box; vertical-align:middle; }
+      #cheatPanel .row { margin: 8px 0; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+      #cheatPanel hr { border: 0; border-top: 1px solid #333; margin: 8px 0; }
+      #cheatPanel .sub { color:#bbb; font-size:12px; margin-top:6px; }
+
+      /* Floating open button */
+      #cheatFab {
+        position: fixed;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 44px;
+        height: 44px;
+        line-height: 44px;
+        text-align: center;
+        border-radius: 22px;
+        background: rgba(34,34,34,.95);
+        color: #fff;
+        border: 1px solid #555;
+        box-shadow: 0 2px 10px rgba(0,0,0,.35);
+        z-index: 100000;
+        cursor: pointer;
+        user-select: none;
+        touch-action: manipulation;
+        pointer-events: auto;
+      }
+
+      /* Virtual ESC button (fixed at left corner) */
+      #escButton {
+        position: fixed;
+        left: 12px;
+        bottom: 12px;
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        background: rgba(68,68,68,0.95);
+        color: #fff;
+        border: 1px solid #555;
+        font-size: 16px;
+        font-weight: bold;
+        z-index: 100000;
+        cursor: pointer;
+        user-select: none;
+        touch-action: manipulation;
+        display: flex;
+        align-items:center;
+        justify-content:center;
+        box-shadow: 0 2px 10px rgba(0,0,0,.35);
+        pointer-events: auto;
+      }
+
+      /* small helper */
+      .btn { background:#2c2c2c;border:1px solid #555;padding:6px 10px;border-radius:6px;color:#fff;cursor:pointer; user-select:none; }
+      .btn.small { padding:4px 8px; font-size:13px }
+      .muted { color:#9aa; font-size:13px }
+      .status { font-size:13px; margin-top:8px; color:#9df; }
+      .danger { color:#f88; }
+      .ok { color:#8f8; }
+
+      /* ensure overlays only handle their pointer area */
+      canvas, body { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+    </style>
     </head>
     <body style="background-color: black">
         <script type="text/javascript" src="js/libs/pixi.js"></script>
@@ -25,5 +144,834 @@
         <script type="text/javascript" src="js/rpg_windows.js"></script>
         <script type="text/javascript" src="js/plugins.js"></script>
         <script type="text/javascript" src="js/main.js"></script>
-    </body>
+<!-- Floating open button -->
+    <div id="cheatFab" title="Open cheats" aria-label="Open cheat menu">≡</div>
+
+    <!-- Cheat panel -->
+    <div id="cheatPanel" aria-hidden="true" role="dialog" aria-label="Cheat menu">
+      <button id="cheatClose" class="btn small" aria-label="Close cheat menu">Close</button>
+      <h2>Cheat Menu</h2>
+      <div id="cheatTabs" aria-hidden="false">
+        <button type="button" data-tab="money">Money</button>
+        <button type="button" data-tab="items">Items</button>
+        <button type="button" data-tab="actors">Actors</button>
+        <button type="button" data-tab="battle">Battle</button> <!-- NEW: Battle tab -->
+        <button type="button" data-tab="time">Time</button>
+        <button type="button" data-tab="vars">Vars</button>
+        <button type="button" data-tab="settings">Settings</button>
+      </div>
+      <div id="cheatContent" class="muted">Choose a tab…</div>
+    </div>
+
+    <!-- Virtual ESC (opens menu reliably on mobile) -->
+    <button id="escButton" type="button" title="Open menu (ESC)" aria-label="Menu (ESC)">ESC</button>
+
+    <script>
+    (function(){
+      /* ========= Utilities ========= */
+      const fab = document.getElementById('cheatFab');
+      const panel = document.getElementById('cheatPanel');
+      const close = document.getElementById('cheatClose');
+      const tabs = document.getElementById('cheatTabs');
+      const content = document.getElementById('cheatContent');
+
+      function el(t, html) { const d = document.createElement(t); if (html !== undefined) d.innerHTML = html; return d; }
+      function escapeHtml(s){ if(s==null) return ''; return String(s).replace(/[&<>"']/g, (m)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+      /* ========= Panel open/close ========= */
+      function openPanel(){
+        panel.classList.add('open');
+        panel.setAttribute('aria-hidden','false');
+        fab.style.display = 'none';
+        // refresh current tab (if any)
+        const tab = panel.dataset.tab || 'money';
+        showCheatTab(tab);
+      }
+      function closePanel(){
+        panel.classList.remove('open');
+        panel.setAttribute('aria-hidden','true');
+        fab.style.display = 'block';
+      }
+
+      // use pointer events for unified touch + mouse + pen
+      fab.addEventListener('pointerdown', (e)=>{ e.preventDefault && e.preventDefault(); openPanel(); }, {passive:false});
+      close.addEventListener('pointerdown', (e)=>{ e.preventDefault && e.preventDefault(); closePanel(); }, {passive:false});
+      // clicking a tab button
+      tabs.addEventListener('pointerdown', (e)=>{
+        const btn = e.target.closest('button[data-tab]');
+        if(!btn) return;
+        e.preventDefault && e.preventDefault();
+        const t = btn.getAttribute('data-tab');
+        showCheatTab(t);
+      }, {passive:false});
+
+      // expose to console
+      window.__cheatPanelOpen = openPanel;
+      window.__cheatPanelClose = closePanel;
+
+      /* ========= Auto-save state (OFF by default) ========= */
+      let autosaveTimer = null;
+      let autosaveEnabled = false;
+      let autosaveIntervalMs = 5 * 60 * 1000; // 5min default when ON
+      let autosaveSlot = 1;
+
+      function enableAutosave(enabled){
+        autosaveEnabled = !!enabled;
+        if(autosaveTimer){ clearInterval(autosaveTimer); autosaveTimer = null; }
+        if(autosaveEnabled){
+          autosaveTimer = setInterval(()=> {
+            try { doSave(autosaveSlot, true); } catch(e) { console.warn('Auto-save failed', e); }
+          }, autosaveIntervalMs);
+        }
+        renderSettingsStatus();
+      }
+      function renderSettingsStatus(){
+        const s = document.getElementById('settingsStatus');
+        if(!s) return;
+        s.textContent = autosaveEnabled ? `Auto-save: every ${autosaveIntervalMs/60000} min (slot ${autosaveSlot})` : `Auto-save: OFF`;
+      }
+
+      /* ========= Save / Load helpers ========= */
+      async function doSave(slot, silent){
+        if(!window.DataManager || typeof DataManager.saveGame !== 'function'){
+          alert('Save function not available in this environment.');
+          return;
+        }
+        slot = Number(slot) || 1;
+        try {
+          const ok = await DataManager.saveGame(slot);
+          if(!silent) alert(ok ? `Saved slot ${slot}` : `Save failed`);
+        } catch(e){
+          console.error('Save error', e);
+          alert('Save failed: ' + (e && e.message ? e.message : e));
+        }
+      }
+
+      async function doLoad(slot){
+        if(!window.DataManager || typeof DataManager.loadGame !== 'function'){
+          alert('Load function not available in this environment.');
+          return;
+        }
+        slot = Number(slot) || 1;
+        try {
+          const ok = await DataManager.loadGame(slot);
+          if(ok) {
+            // attempt to refresh game state
+            if(window.SceneManager && typeof SceneManager.reload === 'function') {
+              SceneManager.reload();
+            } else {
+              location.reload();
+            }
+          } else {
+            alert('Load failed (no saved data).');
+          }
+        } catch(e) {
+          console.error('Load error', e);
+          alert('Load failed: ' + (e && e.message ? e.message : e));
+        }
+      }
+
+      /* ========= Tab router ========= */
+      window.showCheatTab = function(tab){
+        panel.dataset.tab = tab;
+        content.innerHTML = '';
+        try {
+          if (tab === 'money') return renderMoneyTab(content);
+          if (tab === 'items') return renderItemsTab(content);
+          if (tab === 'actors') return renderActorsTab(content);
+          if (tab === 'battle') return renderBattleTab(content); // new
+          if (tab === 'time') return renderTimeTab(content);
+          if (tab === 'vars') return renderVarsTab(content);
+          if (tab === 'settings') return renderSettingsTab(content);
+        } catch(e) {
+          content.textContent = 'Error rendering tab: ' + (e && e.message ? e.message : e);
+          console.error(e);
+        }
+      };
+
+      /* ========= Money ========= */
+      function renderMoneyTab(container){
+        const wrapper = el('div');
+        if(!window.$gameParty) {
+          wrapper.textContent = 'Game not loaded yet.';
+          container.appendChild(wrapper);
+          return;
+        }
+        const gold = (typeof $gameParty.gold === 'function') ? $gameParty.gold() : ($gameParty._gold || 0);
+        const row = el('div');
+        row.className = 'row';
+        row.innerHTML =
+          `<label>Money</label>
+           <input type="number" id="cheat-money" value="${gold}" min="0">
+           <button class="btn small" id="btn-set-money">Set</button>
+           <button class="btn small" id="btn-add-money">+1000</button>`;
+        wrapper.appendChild(row);
+        container.appendChild(wrapper);
+
+        wrapper.querySelector('#btn-set-money').addEventListener('pointerdown', (ev)=>{ ev.preventDefault && ev.preventDefault();
+          const v = parseInt(document.getElementById('cheat-money').value,10);
+          if(!isNaN(v) && window.$gameParty) {
+            if(typeof $gameParty._gold !== 'undefined') $gameParty._gold = v;
+            if(typeof $gameParty.gainGold === 'function') {
+              const cur = (typeof $gameParty.gold === 'function') ? $gameParty.gold() : ($gameParty._gold||0);
+              $gameParty.gainGold(v - cur);
+            }
+            alert('Money set to '+v);
+          }
+        }, {passive:false});
+
+        wrapper.querySelector('#btn-add-money').addEventListener('pointerdown',(ev)=>{ ev.preventDefault && ev.preventDefault();
+          if(!window.$gameParty) return;
+          if(typeof $gameParty.gainGold === 'function') $gameParty.gainGold(1000);
+          else if(typeof $gameParty._gold !== 'undefined') $gameParty._gold = ($gameParty._gold || 0) + 1000;
+          const newv = (typeof $gameParty.gold==='function') ? $gameParty.gold() : ($gameParty._gold||0);
+          document.getElementById('cheat-money').value = newv;
+          alert('Added 1000. Now '+newv);
+        }, {passive:false});
+      }
+
+      /* ========= Items ========= */
+      function renderItemsTab(container){
+        const wrapper = el('div');
+        if(!window.$dataItems || !window.$gameParty) {
+          wrapper.textContent = 'Game not loaded yet.';
+          container.appendChild(wrapper);
+          return;
+        }
+        // list items
+        window.$dataItems.forEach(item=>{
+          if(!item) return;
+          const row = el('div');
+          row.className = 'row';
+          row.innerHTML =
+            `<label style="width:160px">${escapeHtml(item.name || ('Item '+item.id))}</label>
+             <input type="number" id="cheat-item-${item.id}" value="${$gameParty.numItems ? $gameParty.numItems(item) : 0}" min="0">
+             <button class="btn small" data-id="${item.id}">Set</button>`;
+          wrapper.appendChild(row);
+        });
+        container.appendChild(wrapper);
+
+        // delegation - pointerdown
+        wrapper.addEventListener('pointerdown', (ev)=>{
+          const b = ev.target.closest('button[data-id]');
+          if(!b) return;
+          ev.preventDefault && ev.preventDefault();
+          const id = Number(b.dataset.id);
+          const input = document.getElementById('cheat-item-'+id);
+          const v = parseInt(input.value,10);
+          if(isNaN(v)) return;
+          const item = $dataItems[id];
+          const cur = $gameParty.numItems(item);
+          $gameParty.gainItem(item, v - cur);
+          alert('Item '+(item.name||id)+' set to '+v);
+        }, {passive:false});
+      }
+
+      /* ========= Actors ========= */
+      function renderActorsTab(container){
+        const wrapper = el('div');
+        if(!window.$gameActors || !window.$gameParty) {
+          wrapper.textContent = 'Game not loaded yet.';
+          container.appendChild(wrapper);
+          return;
+        }
+        $gameParty.members().forEach(actor=>{
+          const id = actor.actorId();
+          const block = el('div');
+          block.style.borderTop = '1px solid rgba(255,255,255,.04)';
+          block.style.paddingTop = '8px';
+          block.innerHTML =
+            `<div style="font-weight:700">${escapeHtml(actor.name())}</div>
+             <div class="row"><label>HP</label><input type="number" id="hp-${id}" value="${actor.hp}" min="0"><button class="btn small" data-set-hp="${id}">Set</button></div>
+             <div class="row"><label>MP</label><input type="number" id="mp-${id}" value="${actor.mp}" min="0"><button class="btn small" data-set-mp="${id}">Set</button></div>
+             <div class="row"><label>Level</label><input type="number" id="lv-${id}" value="${actor.level}" min="1"><button class="btn small" data-set-lv="${id}">Set</button></div>`;
+          wrapper.appendChild(block);
+        });
+        container.appendChild(wrapper);
+
+        wrapper.addEventListener('pointerdown', (ev)=>{
+          const hpBtn = ev.target.closest('button[data-set-hp]');
+          if(hpBtn){ ev.preventDefault && ev.preventDefault();
+            const id = Number(hpBtn.getAttribute('data-set-hp'));
+            const val = parseInt(document.getElementById('hp-'+id).value,10);
+            if(!isNaN(val)){ const a = $gameActors.actor(id); if(a) a.setHp(val); alert('HP set'); }
+            return;
+          }
+          const mpBtn = ev.target.closest('button[data-set-mp]');
+          if(mpBtn){ ev.preventDefault && ev.preventDefault();
+            const id = Number(mpBtn.getAttribute('data-set-mp'));
+            const val = parseInt(document.getElementById('mp-'+id).value,10);
+            if(!isNaN(val)){ const a = $gameActors.actor(id); if(a) a.setMp(val); alert('MP set'); }
+            return;
+          }
+          const lvBtn = ev.target.closest('button[data-set-lv]');
+          if(lvBtn){ ev.preventDefault && ev.preventDefault();
+            const id = Number(lvBtn.getAttribute('data-set-lv'));
+            const val = parseInt(document.getElementById('lv-'+id).value,10);
+            if(!isNaN(val)){ const a = $gameActors.actor(id); if(a) a.changeLevel(val,false); alert('Level set'); }
+            return;
+          }
+        }, {passive:false});
+      }
+
+      /* ========= Battle tab (MTool functions) ========= */
+      // states
+      let cheat_instantWin = false;   // instant win button doesn't need persistent state but keep var for reference
+      let cheat_enemyIgnore = false;  // when true, player's touch-trigger action is suppressed
+      let cheat_passThrough = false;  // when true, player._through = true
+
+      // Keep original triggerTouchAction so we can restore when toggle off
+      const _orig_triggerTouchAction = (typeof Game_Player !== 'undefined' && Game_Player.prototype && Game_Player.prototype.triggerTouchAction) ? Game_Player.prototype.triggerTouchAction : null;
+
+      function applyEnemyIgnoreWrap(){
+        if(!window.Game_Player || !_orig_triggerTouchAction) return;
+        // If we already wrapped, avoid wrapping twice
+        if(Game_Player.prototype.triggerTouchAction && Game_Player.prototype.triggerTouchAction.__isCheatWrap) return;
+        Game_Player.prototype.triggerTouchAction = function() {
+          if(window.__cheat_enemyIgnore) {
+            // do nothing (ignore touch-trigger events)
+            return;
+          }
+          // call original
+          return _orig_triggerTouchAction.apply(this, arguments);
+        };
+        Game_Player.prototype.triggerTouchAction.__isCheatWrap = true;
+      }
+
+      function removeEnemyIgnoreWrap(){
+        if(!window.Game_Player || !_orig_triggerTouchAction) return;
+        // Restore original if we wrapped
+        if(Game_Player.prototype.triggerTouchAction && Game_Player.prototype.triggerTouchAction.__isCheatWrap) {
+          Game_Player.prototype.triggerTouchAction = _orig_triggerTouchAction;
+        }
+      }
+
+      // keep a helper to set player _through state (if player exists)
+      function applyPassThroughToPlayer(){
+        try {
+          if(window.$gamePlayer) {
+            $gamePlayer._through = !!window.__cheat_passThrough;
+          }
+        } catch(e){}
+      }
+
+      // Ensure cheats applied on map load (so toggles persist across maps)
+      (function(){
+        if(window.Scene_Map && Scene_Map.prototype && !Scene_Map.prototype.__cheatOnMapLoaded) {
+          const __orig_onMapLoaded = Scene_Map.prototype.onMapLoaded;
+          Scene_Map.prototype.onMapLoaded = function() {
+            __orig_onMapLoaded.apply(this, arguments);
+            // reapply pass-through
+            applyPassThroughToPlayer();
+            // reapply enemy-ignore wrapping if enabled
+            if(window.__cheat_enemyIgnore) applyEnemyIgnoreWrap();
+          };
+          Scene_Map.prototype.onMapLoaded.__cheatOnMapLoaded = true;
+        }
+      })();
+
+      function renderBattleTab(container){
+        const wrapper = el('div');
+        if(!window.BattleManager && !window.$gameParty && !window.$gameTroop) {
+          // It's okay if not in battle; we still show controls
+        }
+
+        wrapper.appendChild(el('div','<div class="sub">MTool-like battle controls: Instant Win (in-battle)</div>'));
+
+        // Instant win
+        const winRow = el('div');
+        winRow.className = 'row';
+        winRow.innerHTML = `<button class="btn small" id="cheat-instant-win">Instant Win (kill all enemies)</button>`;
+        wrapper.appendChild(winRow);
+
+        // Enemy Ignore toggle
+        const ignoreRow = el('div');
+        ignoreRow.className = 'row';
+        ignoreRow.innerHTML = `<label>Enemy Ignore</label>
+                               <button class="btn small" id="cheat-enemy-ignore-toggle">OFF</button>
+                               <div class="sub">When ON, player touch triggers are suppressed (common 'player touch' enemy events won't start).</div>`;
+        wrapper.appendChild(ignoreRow);
+
+        // Pass Through toggle
+        const passRow = el('div');
+        passRow.className = 'row';
+        passRow.innerHTML = `<label>Pass Through</label>
+                             <button class="btn small" id="cheat-pass-toggle">OFF</button>
+                             <div class="sub">When ON, the player can walk through obstacles (sets $gamePlayer._through = true).</div>`;
+        wrapper.appendChild(passRow);
+
+        container.appendChild(wrapper);
+
+        // handlers
+        wrapper.querySelector('#cheat-instant-win').addEventListener('pointerdown', (ev)=>{ ev.preventDefault && ev.preventDefault();
+          try {
+            // if in battle
+            let inBattle = false;
+            if(window.$gameParty && typeof $gameParty.inBattle === 'function') inBattle = $gameParty.inBattle();
+            if(window.BattleManager && typeof BattleManager.isBattleTest === 'function') {
+              // not reliable as general test, but we use $gameParty.inBattle if available
+            }
+            if(!inBattle && window.SceneManager && SceneManager._scene && window.Scene_Battle && SceneManager._scene instanceof Scene_Battle) {
+              inBattle = true;
+            }
+            if(!inBattle) {
+              alert('Not in battle.');
+              return;
+            }
+            // try to set all troop members' HP to 0
+            if(window.$gameTroop && typeof $gameTroop.members === 'function') {
+              $gameTroop.members().forEach(function(enemy){
+                try {
+                  if(typeof enemy.setHp === 'function') {
+                    enemy.setHp(0);
+                  } else if(typeof enemy.changeHp === 'function') {
+                    enemy.changeHp(-enemy.hp);
+                  } else if(typeof enemy.hp !== 'undefined') {
+                    enemy.hp = 0;
+                  }
+                } catch(e){}
+              });
+            }
+            // attempt to end battle (best-effort)
+            if(window.BattleManager && typeof BattleManager.endBattle === 'function') {
+              try { BattleManager.endBattle(0); } catch(e) {}
+            }
+            // fallback: try to call Scene_Battle.prototype.updateForceVictory or similar - not standard; we keep simple
+            alert('Tried to instant-win the battle (best-effort).');
+          } catch(e){
+            console.error(e);
+            alert('Instant win failed: ' + (e && e.message ? e.message : e));
+          }
+        }, {passive:false});
+
+        const enemyBtn = wrapper.querySelector('#cheat-enemy-ignore-toggle');
+        enemyBtn.addEventListener('pointerdown', (ev)=>{ ev.preventDefault && ev.preventDefault();
+          window.__cheat_enemyIgnore = !window.__cheat_enemyIgnore;
+          cheat_enemyIgnore = window.__cheat_enemyIgnore;
+          if(cheat_enemyIgnore){
+            // apply wrapper
+            try { applyEnemyIgnoreWrap(); } catch(e){ console.warn(e); }
+            enemyBtn.textContent = 'ON';
+            enemyBtn.classList.add('ok');
+          } else {
+            // restore original behavior
+            try { removeEnemyIgnoreWrap(); } catch(e){ console.warn(e); }
+            enemyBtn.textContent = 'OFF';
+            enemyBtn.classList.remove('ok');
+          }
+        }, {passive:false});
+
+        const passBtn = wrapper.querySelector('#cheat-pass-toggle');
+        passBtn.addEventListener('pointerdown', (ev)=>{ ev.preventDefault && ev.preventDefault();
+          window.__cheat_passThrough = !window.__cheat_passThrough;
+          cheat_passThrough = window.__cheat_passThrough;
+          applyPassThroughToPlayer();
+          if(cheat_passThrough){
+            passBtn.textContent = 'ON';
+            passBtn.classList.add('ok');
+          } else {
+            passBtn.textContent = 'OFF';
+            passBtn.classList.remove('ok');
+          }
+        }, {passive:false});
+
+        // Ensure initial text reflects current toggles
+        (function refreshBattleUI(){
+          if(window.__cheat_enemyIgnore){
+            enemyBtn.textContent = 'ON'; enemyBtn.classList.add('ok');
+            try { applyEnemyIgnoreWrap(); } catch(e){}
+          } else { enemyBtn.textContent = 'OFF'; enemyBtn.classList.remove('ok'); }
+          if(window.__cheat_passThrough){
+            passBtn.textContent = 'ON'; passBtn.classList.add('ok');
+            try { applyPassThroughToPlayer(); } catch(e){}
+          } else { passBtn.textContent = 'OFF'; passBtn.classList.remove('ok'); }
+        })();
+      }
+
+      /* ========= Time tab (Chronus) ========= */
+      // We'll call Chronus API directly: $gameSystem.chronus().setDay() and setTime()
+      // Default Chronus variable IDs you previously used (best-effort).
+      const chronusDefaultVars = { weekday:135, month:137, day:139, hour:239, minute:240, year:0 };
+
+      function renderTimeTab(container){
+        const wrapper = el('div');
+        if(!window.$gameSystem || !window.$gameVariables){
+          wrapper.textContent = 'Game not ready (Chronus or variables not available).';
+          container.appendChild(wrapper);
+          return;
+        }
+
+        wrapper.appendChild(el('div','<div class="sub">This uses the Chronus plugin. Change Month/Day/Hour/Minute then press Set — Chronus will update the scene immediately.</div>'));
+
+        // Build fields (no year input by default if game doesn't use it, but we include hidden year control if needed)
+        const row1 = el('div'); row1.className='row';
+        row1.innerHTML = `<label style="width:90px">Month</label><input type="number" id="time-month" min="1" value="${(window.$gameSystem && $gameSystem.chronus)? $gameSystem.chronus().getMonth():1}" style="width:90px">
+                          <label style="width:60px">Day</label><input type="number" id="time-day" min="1" value="${(window.$gameSystem && $gameSystem.chronus)? $gameSystem.chronus().getDay():1}" style="width:70px">`;
+        wrapper.appendChild(row1);
+
+        const row2 = el('div'); row2.className='row';
+        row2.innerHTML = `<label style="width:90px">Hour</label><input type="number" id="time-hour" min="0" max="23" value="${(window.$gameSystem && $gameSystem.chronus)? $gameSystem.chronus().getHour():0}" style="width:80px">
+                          <label style="width:60px">Minute</label><input type="number" id="time-minute" min="0" max="59" value="${(window.$gameSystem && $gameSystem.chronus)? $gameSystem.chronus().getMinute():0}" style="width:80px">`;
+        wrapper.appendChild(row2);
+
+        // weekday preview (read-only)
+        const row3 = el('div'); row3.className='row';
+        row3.innerHTML = `<label style="width:90px">Weekday</label><input type="text" id="time-week" readonly style="width:200px" value="${(window.$gameSystem && $gameSystem.chronus)? $gameSystem.chronus().getWeekName() : ''}">`;
+        wrapper.appendChild(row3);
+
+        const btnRow = el('div'); btnRow.className='row';
+        btnRow.innerHTML = `<button class="btn small" id="time-set">Set (Chronus)</button>
+                            <button class="btn small" id="time-set-vars">Set + Vars</button>
+                            <button class="btn small" id="time-refresh">Refresh</button>
+                            <div class="sub">If "Weekday" looks wrong, use Set (Chronus) which uses Chronus' calendar logic.</div>`;
+        wrapper.appendChild(btnRow);
+
+        container.appendChild(wrapper);
+
+        function refreshFields(){
+          if(!$gameSystem || !$gameSystem.chronus) return;
+          const c = $gameSystem.chronus();
+          document.getElementById('time-month').value = c.getMonth();
+          document.getElementById('time-day').value = c.getDay();
+          document.getElementById('time-hour').value = c.getHour();
+          document.getElementById('time-minute').value = c.getMinute();
+          document.getElementById('time-week').value = c.getWeekName();
+        }
+
+        wrapper.querySelector('#time-refresh').addEventListener('pointerdown', (ev)=>{ ev.preventDefault && ev.preventDefault(); refreshFields(); }, {passive:false});
+
+        wrapper.querySelector('#time-set').addEventListener('pointerdown', (ev)=>{ ev.preventDefault && ev.preventDefault();
+          if(!window.$gameSystem || !window.$gameSystem.chronus){ alert('Chronus not available'); return; }
+          const m = parseInt(document.getElementById('time-month').value,10);
+          const d = parseInt(document.getElementById('time-day').value,10);
+          const h = parseInt(document.getElementById('time-hour').value,10);
+          const mi = parseInt(document.getElementById('time-minute').value,10);
+          if([m,d,h,mi].some(x=>isNaN(x))){ alert('Invalid values'); return; }
+          try{
+            const chronus = $gameSystem.chronus();
+            let year = (chronus.getYear && typeof chronus.getYear === 'function') ? chronus.getYear() : 1;
+            chronus.setDay(year, m, d);
+            chronus.setTime(h, mi);
+            refreshFields();
+            alert('Chronus time set.');
+          } catch(e){ console.error(e); alert('Failed to set Chronus time: '+(e && e.message ? e.message : e)); }
+        }, {passive:false});
+
+        wrapper.querySelector('#time-set-vars').addEventListener('pointerdown', (ev)=>{ ev.preventDefault && ev.preventDefault();
+          if(!window.$gameSystem || !window.$gameSystem.chronus){ alert('Chronus not available'); return; }
+          const m = parseInt(document.getElementById('time-month').value,10);
+          const d = parseInt(document.getElementById('time-day').value,10);
+          const h = parseInt(document.getElementById('time-hour').value,10);
+          const mi = parseInt(document.getElementById('time-minute').value,10);
+          if([m,d,h,mi].some(x=>isNaN(x))){ alert('Invalid values'); return; }
+          try{
+            const chronus = $gameSystem.chronus();
+            let year = (chronus.getYear && typeof chronus.getYear === 'function') ? chronus.getYear() : 1;
+            chronus.setDay(year, m, d);
+            chronus.setTime(h, mi);
+            try {
+              const params = PluginManager && PluginManager.parameters ? PluginManager.parameters('Chronus') : {};
+              const yearVar = Number(params && params['年のゲーム変数'] || 0) || 0;
+              const monthVar = Number(params && params['月のゲーム変数'] || 0) || chronusDefaultVars.month;
+              const dayVar = Number(params && params['日のゲーム変数'] || 0) || chronusDefaultVars.day;
+              const weekdayVar = Number(params && params['曜日IDのゲーム変数'] || 0) || chronusDefaultVars.weekday;
+              const hourVar = Number(params && params['時のゲーム変数'] || 0) || chronusDefaultVars.hour;
+              const minVar = Number(params && params['分のゲーム変数'] || 0) || chronusDefaultVars.minute;
+              if(typeof $gameVariables !== 'undefined'){
+                if(yearVar) $gameVariables.setValue(yearVar, chronus.getYear());
+                if(monthVar) $gameVariables.setValue(monthVar, chronus.getMonth());
+                if(dayVar) $gameVariables.setValue(dayVar, chronus.getDay());
+                if(weekdayVar) $gameVariables.setValue(weekdayVar, chronus.getWeekIndex());
+                if(hourVar) $gameVariables.setValue(hourVar, chronus.getHour());
+                if(minVar) $gameVariables.setValue(minVar, chronus.getMinute());
+              }
+            } catch(_e) { /* ignore */ }
+            refreshFields();
+            alert('Chronus and variables set.');
+          } catch(e){ console.error(e); alert('Failed: '+(e && e.message ? e.message : e)); }
+        }, {passive:false});
+
+        // initial populate
+        refreshFields();
+      }
+
+      /* ========= Vars tab (dropdowns) ========= */
+      function renderVarsTab(container){
+        const wrapper = el('div');
+        if(!window.$dataSystem || !window.$gameVariables || !window.$gameSwitches){
+          wrapper.textContent = 'Game not loaded yet.';
+          container.appendChild(wrapper);
+          return;
+        }
+
+        // Variables dropdown
+        const varRow = el('div');
+        varRow.className = 'row';
+        varRow.innerHTML =
+          `<label>Variable</label>
+           <select id="cheat-var-select" style="width:220px"></select>
+           <button class="btn small" id="cheat-var-refresh">Refresh</button>`;
+        wrapper.appendChild(varRow);
+
+        // var value editor
+        const varEdit = el('div');
+        varEdit.className = 'row';
+        varEdit.innerHTML =
+          `<label>Value</label>
+           <input type="number" id="cheat-var-value" value="0">
+           <button class="btn small" id="cheat-var-set">Set</button>
+           <button class="btn small" id="cheat-var-add">+1</button>`;
+        wrapper.appendChild(varEdit);
+
+        // Switches dropdown
+        const swRow = el('div');
+        swRow.className = 'row';
+        swRow.innerHTML =
+          `<label>Switch</label>
+           <select id="cheat-sw-select" style="width:220px"></select>
+           <button class="btn small" id="cheat-sw-refresh">Refresh</button>`;
+        wrapper.appendChild(swRow);
+
+        const swEdit = el('div');
+        swEdit.className = 'row';
+        swEdit.innerHTML =
+          `<label>Value</label>
+           <select id="cheat-sw-value"><option value="1">ON</option><option value="0">OFF</option></select>
+           <button class="btn small" id="cheat-sw-set">Set</button>`;
+        wrapper.appendChild(swEdit);
+
+        // helper: populate selects from $dataSystem
+        function populateVarsAndSwitches(){
+          const varSelect = document.getElementById('cheat-var-select');
+          varSelect.innerHTML = '';
+          const vars = $dataSystem && $dataSystem.variables ? $dataSystem.variables : [];
+          for(let i=1;i<vars.length;i++){
+            const name = vars[i] && vars[i].length ? vars[i] : `Var ${i}`;
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.textContent = `${i} — ${name}`;
+            varSelect.appendChild(opt);
+          }
+
+          const swSelect = document.getElementById('cheat-sw-select');
+          swSelect.innerHTML = '';
+          const sws = $dataSystem && $dataSystem.switches ? $dataSystem.switches : [];
+          for(let i=1;i<sws.length;i++){
+            const name = sws[i] && sws[i].length ? sws[i] : `Switch ${i}`;
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.textContent = `${i} — ${name}`;
+            swSelect.appendChild(opt);
+          }
+
+          // set current values
+          updateVarPreview();
+          updateSwPreview();
+        }
+
+        function updateVarPreview(){
+          const sel = document.getElementById('cheat-var-select');
+          const id = Number(sel.value) || 0;
+          const cur = $gameVariables.value(id);
+          document.getElementById('cheat-var-value').value = (typeof cur !== 'undefined' ? cur : '');
+        }
+        function updateSwPreview(){
+          const sel = document.getElementById('cheat-sw-select');
+          const id = Number(sel.value) || 0;
+          const cur = $gameSwitches.value(id) ? 1 : 0;
+          document.getElementById('cheat-sw-value').value = cur;
+        }
+
+        wrapper.querySelector('#cheat-var-refresh').addEventListener('pointerdown', (ev)=>{ ev.preventDefault && ev.preventDefault(); populateVarsAndSwitches(); }, {passive:false});
+        wrapper.querySelector('#cheat-var-set').addEventListener('pointerdown', (ev)=>{ ev.preventDefault && ev.preventDefault();
+          const id = Number(document.getElementById('cheat-var-select').value);
+          const v = parseInt(document.getElementById('cheat-var-value').value,10);
+          if(!isNaN(id) && !isNaN(v)) {
+            $gameVariables.setValue(id, v);
+            alert(`Var ${id} set to ${v}`);
+          }
+        }, {passive:false});
+        wrapper.querySelector('#cheat-var-add').addEventListener('pointerdown', (ev)=>{ ev.preventDefault && ev.preventDefault();
+          const id = Number(document.getElementById('cheat-var-select').value);
+          const cur = Number($gameVariables.value(id) || 0);
+          $gameVariables.setValue(id, cur+1);
+          updateVarPreview();
+        }, {passive:false});
+
+        wrapper.querySelector('#cheat-sw-refresh').addEventListener('pointerdown', (ev)=>{ ev.preventDefault && ev.preventDefault(); populateVarsAndSwitches(); }, {passive:false});
+        wrapper.querySelector('#cheat-sw-set').addEventListener('pointerdown', (ev)=>{ ev.preventDefault && ev.preventDefault();
+          const id = Number(document.getElementById('cheat-sw-select').value);
+          const v = Number(document.getElementById('cheat-sw-value').value) === 1;
+          if(!isNaN(id)) {
+            $gameSwitches.setValue(id, v);
+            alert(`Switch ${id} set to ${v ? 'ON' : 'OFF'}`);
+          }
+        }, {passive:false});
+
+        wrapper.querySelector('#cheat-var-select').addEventListener('change', updateVarPreview);
+        wrapper.querySelector('#cheat-sw-select').addEventListener('change', updateSwPreview);
+
+        container.appendChild(wrapper);
+        // initial populate
+        populateVarsAndSwitches();
+      }
+
+      /* ========= Settings tab ========= */
+      function renderSettingsTab(container){
+        const wrapper = el('div');
+        wrapper.innerHTML =
+          `<div class="row"><label>Auto-save</label>
+             <select id="autosave-interval" style="width:120px">
+               <option value="300000">5 min</option>
+               <option value="600000">10 min</option>
+               <option value="900000">15 min</option>
+               <option value="1200000">20 min</option>
+               <option value="1800000">30 min</option>
+             </select>
+             <label style="width:70px">Slot</label>
+             <select id="autosave-slot" style="width:80px">
+               <option value="1">1</option>
+               <option value="2">2</option>
+               <option value="3">3</option>
+               <option value="4">4</option>
+               <option value="5">5</option>
+               <option value="6">6</option>
+             </select>
+             <button class="btn small" id="autosave-toggle">Enable</button>
+           </div>
+           <div class="row">
+             <button class="btn small" id="save-now">Save Now</button>
+             <button class="btn small" id="load-now">Load Now</button>
+             <select id="manual-slot" style="width:90px">
+               <option value="1">slot 1</option><option value="2">slot 2</option><option value="3">slot 3</option>
+               <option value="4">slot 4</option><option value="5">slot 5</option><option value="6">slot 6</option>
+             </select>
+           </div>
+           <div class="row"><span id="settingsStatus" class="status">Auto-save: OFF</span></div>
+           <div class="row"><button class="btn small" id="force-open-save-menu">Force open Save menu</button>
+             <button class="btn small" id="force-open-load-menu">Force open Load menu</button>
+           </div>
+           <div class="sub">Auto-save is OFF by default (will not persist between page reloads).</div>`;
+        container.appendChild(wrapper);
+
+        // wire UI
+        const intSel = document.getElementById('autosave-interval');
+        const slotSel = document.getElementById('autosave-slot');
+        const toggleBtn = document.getElementById('autosave-toggle');
+        const manualSlot = document.getElementById('manual-slot');
+        const saveNowBtn = document.getElementById('save-now');
+        const loadNowBtn = document.getElementById('load-now');
+
+        intSel.value = String(autosaveIntervalMs);
+        slotSel.value = String(autosaveSlot);
+        renderSettingsStatus();
+
+        intSel.addEventListener('change', ()=> {
+          autosaveIntervalMs = Number(intSel.value);
+          if(autosaveEnabled){ enableAutosave(true); }
+          renderSettingsStatus();
+        });
+        slotSel.addEventListener('change', ()=> {
+          autosaveSlot = Number(slotSel.value);
+          renderSettingsStatus();
+        });
+        toggleBtn.addEventListener('pointerdown', (ev)=>{ ev.preventDefault && ev.preventDefault(); enableAutosave(!autosaveEnabled); toggleBtn.textContent = autosaveEnabled ? 'Disable' : 'Enable'; }, {passive:false});
+
+        saveNowBtn.addEventListener('pointerdown', (ev)=>{ ev.preventDefault && ev.preventDefault(); const s = Number(manualSlot.value) || 1; doSave(s,false); }, {passive:false});
+        loadNowBtn.addEventListener('pointerdown', (ev)=>{ ev.preventDefault && ev.preventDefault(); const s = Number(manualSlot.value) || 1; if(confirm('Load slot '+s+'? Current progress will be replaced.')) doLoad(s); }, {passive:false});
+
+        // force open save/load menu (attempt)
+        document.getElementById('force-open-save-menu').addEventListener('pointerdown', (ev)=>{ ev.preventDefault && ev.preventDefault();
+          try {
+            if(window.SceneManager && typeof Scene_Save !== 'undefined'){
+              SceneManager.push(Scene_Save);
+            } else {
+              alert('SceneManager or Scene_Save not available.');
+            }
+          } catch(e){ alert('Cannot open save menu: '+e.message); }
+        }, {passive:false});
+        document.getElementById('force-open-load-menu').addEventListener('pointerdown', (ev)=>{ ev.preventDefault && ev.preventDefault();
+          try {
+            if(window.SceneManager && typeof Scene_Load !== 'undefined'){
+              SceneManager.push(Scene_Load);
+            } else {
+              alert('SceneManager or Scene_Load not available.');
+            }
+          } catch(e){ alert('Cannot open load menu: '+e.message); }
+        }, {passive:false});
+
+        renderSettingsStatus();
+      }
+
+      /* ========= ESC button (single trigger, debounced) ========= */
+      (function(){
+        const btn = document.getElementById('escButton');
+        let disabled = false;
+        function openMenuDirect(){
+          try {
+            if (window.SceneManager && SceneManager._scene) {
+              const sc = SceneManager._scene;
+              if (window.Scene_Map && sc instanceof Scene_Map) {
+                if (window.$gamePlayer && $gamePlayer.canMove && $gamePlayer.canMove()) {
+                  if (window.SoundManager && SoundManager.playOk) SoundManager.playOk();
+                  if (window.Window_MenuCommand && Window_MenuCommand.initCommandPosition) {
+                    Window_MenuCommand.initCommandPosition();
+                  }
+                  SceneManager.push(Scene_Menu);
+                  return true;
+                }
+              }
+              // if there are stacked scenes, pop to previous
+              if (SceneManager._stack && SceneManager._stack.length > 1) {
+                if(typeof SceneManager.pop === 'function') SceneManager.pop();
+                else if(typeof SceneManager.goto === 'function') SceneManager.goto(Scene_Map);
+                return true;
+              }
+            }
+          } catch(e) {}
+          return false;
+        }
+        function onEscPress(e){
+          e && e.preventDefault && e.preventDefault();
+          if(disabled) return;
+          disabled = true;
+          setTimeout(()=> disabled = false, 450); // small debounce to avoid continuous triggering
+          if (!openMenuDirect()) {
+            try {
+              const ev = new KeyboardEvent('keydown', {key:'Escape', code:'Escape', bubbles:true, cancelable:true});
+              Object.defineProperty(ev, 'keyCode', {get: ()=>27});
+              Object.defineProperty(ev, 'which',   {get: ()=>27});
+              document.dispatchEvent(ev);
+              window.dispatchEvent(ev);
+              setTimeout(()=>{
+                const ev2 = new KeyboardEvent('keyup', {key:'Escape', code:'Escape', bubbles:true, cancelable:true});
+                Object.defineProperty(ev2, 'keyCode', {get: ()=>27});
+                Object.defineProperty(ev2, 'which',   {get: ()=>27});
+                document.dispatchEvent(ev2);
+                window.dispatchEvent(ev2);
+              },16);
+            } catch(_) {}
+          }
+        }
+        // pointer events
+        btn.addEventListener('pointerdown', onEscPress, {passive:false});
+        btn.addEventListener('touchstart', onEscPress, {passive:false});
+      })();
+
+      /* ========= Expose save/load for console ========= */
+      window.__doSave = doSave;
+      window.__doLoad = doLoad;
+
+      /* ========= Initial state ========= */
+      // autosave OFF initially
+      enableAutosave(false);
+
+      // default tab when opened
+      window.__renderCheat = function(tab){ showCheatTab(tab || 'money'); };
+
+      // no auto open on load
+    })();
+    </script>
+  </body>
 </html>
+

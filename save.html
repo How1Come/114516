@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RPG Maker Save Export / Import (MV & MZ, HTML5 + .rpgsave)</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --panel: #111825;
+      --muted: #9fb0c0;
+      --text: #e6eef7;
+      --brand: #4cc3ff;
+      --brand-600:#2aa7f0;
+      --ok: #3ddc84;
+      --warn: #ffb454;
+      --bad: #ff6b6b;
+      --chip: #1a2433;
+      --chip-brd: #2a3a55;
+      --focus: 0 0 0 3px rgba(76,195,255,.25);
+    }
+    html,body{height:100%}
+    body{
+      margin:0; background: radial-gradient(1200px 800px at 80% -20%, rgba(76,195,255,.08), transparent 60%),
+                                radial-gradient(800px 600px at 10% 120%, rgba(61,220,132,.07), transparent 60%),
+                                var(--bg);
+      color:var(--text);
+      font: 16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Inter, Ubuntu, Cantarell, Noto Sans, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+    .wrap{max-width:1024px;margin:40px auto;padding:0 16px}
+    header{display:flex;gap:16px;align-items:center;justify-content:space-between;margin-bottom:20px}
+    .title{font-weight:800;font-size:clamp(22px,3vw,30px);letter-spacing:.2px}
+    .subtitle{color:var(--muted);font-size:14px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.0));border:1px solid #1a2536;border-radius:16px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+    .grid{display:grid;grid-template-columns: 1fr; gap:16px}
+    @media(min-width:900px){.grid{grid-template-columns: 1fr 1fr}}
+    .btn{appearance:none;border:1px solid #27506b;background:linear-gradient(180deg,#153045,#0f2638);color:var(--text);padding:10px 14px;border-radius:12px;font-weight:700;cursor:pointer;transition:.15s;}
+    .btn:hover{border-color:#2f668a;transform:translateY(-1px)}
+    .btn:focus{outline:none;box-shadow:var(--focus)}
+    .btn.primary{background:linear-gradient(180deg, #0e6aa8, #0a5486);border-color:#0d5e96}
+    .btn.primary:hover{background:linear-gradient(180deg,#0f77bf,#0b5e9a)}
+    .btn.good{border-color:#2e6b52;background:linear-gradient(180deg,#144335,#0d2f25)}
+    .btn.bad{border-color:#6b2e2e;background:linear-gradient(180deg,#431414,#2f0d0d)}
+    .btn.link{background:transparent;border-color:transparent;padding:0;color:var(--brand)}
+    .klist{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 4px}
+    .chip{border:1px solid var(--chip-brd);background:linear-gradient(180deg,#0e1725,#0b1320);border-radius:999px;padding:6px 10px;font-size:12px;color:var(--muted)}
+    .chip strong{color:var(--text)}
+    .muted{color:var(--muted)}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+    input[type="file"]{display:none}
+    .filelabel{display:inline-flex;align-items:center;gap:10px}
+    .filedrop{border:1.5px dashed #284057;border-radius:14px;padding:18px;text-align:center;background:rgba(255,255,255,.02)}
+    .filedrop.drag{border-color:var(--brand)}
+    .help{font-size:13px;color:var(--muted)}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .spacer{flex:1}
+    .tbl{width:100%;border-collapse:separate;border-spacing:0 8px}
+    .tbl th{font-size:12px;color:var(--muted);font-weight:700;text-align:left;padding:0 10px}
+    .tbl td{background:linear-gradient(180deg,#0a1522,#08101b);border:1px solid #1a2536;border-left-width:1px;border-right-width:1px;padding:10px;border-radius:10px}
+    .tbl td:first-child{border-right:none}
+    .tbl td:last-child{border-left:none}
+    .badge{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid #25475c;background:#0d2132;color:var(--muted)}
+    .badge.ok{color:var(--ok);border-color:#1f5b45;background:#0f2b22}
+    .badge.warn{color:var(--warn);border-color:#54421f;background:#2a2314}
+    .badge.bad{color:var(--bad);border-color:#5b1f1f;background:#2b0f0f}
+    .sr{position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden}
+    .foot{margin-top:22px;font-size:12px;color:var(--muted)}
+    .codebox{white-space:pre-wrap;word-break:break-word;background:#0a1522;border:1px solid #1a2536;border-radius:10px;padding:10px;max-height:260px;overflow:auto}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <div class="title">RPG Maker Save Export / Import</div>
+        <div class="subtitle">MV & MZ HTML5 saves (localStorage) + direct <span class="mono">.rpgsave</span> import/export. Everything happens locally in your browser.</div>
+      </div>
+      <div class="row">
+        <button id="btn-scan" class="btn" title="Rescan localStorage">Rescan</button>
+        <button id="btn-export" class="btn primary" title="Export detected save keys">Prepare Export</button>
+      </div>
+    </header>
+    <div class="grid">
+      <!-- LEFT: Detected keys & actions -->
+      <section class="card">
+        <h2 style="margin:0 0 6px 0">Detected Save Keys</h2>
+        <div class="help">Keys in <span class="mono">localStorage</span> that look like RPG Maker data. Select what you want to export.</div>
+
+        <div id="keyChips" class="klist"></div>
+
+        <table class="tbl" aria-label="Detected keys table">
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th>Size</th>
+              <th>Type</th>
+              <th>Include</th>
+            </tr>
+          </thead>
+          <tbody id="keyTable"></tbody>
+        </table>
+
+        <div class="row" style="margin-top:8px">
+          <button id="btn-toggle-all" class="btn">Toggle All</button>
+          <button id="btn-delete-selected" class="btn bad" title="Delete selected keys from localStorage">Delete Selected</button>
+          <div class="spacer"></div>
+          <span id="scanBadge" class="badge">Idle</span>
+        </div>
+      </section>
+
+      <!-- RIGHT: Import / Restore -->
+      <section class="card">
+        <h2 style="margin:0 0 6px 0">Import / Restore</h2>
+        <div id="drop" class="filedrop" tabindex="0" role="button" aria-label="Drop a backup or .rpgsave file here or browse">
+          <div style="margin-bottom:10px">Drop a backup <em>or</em> <span class="mono">.rpgsave</span> here</div>
+          <label class="filelabel btn" for="file">
+            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 16V7.83l2.59 2.58L16 9l-4-4l-4 4l1.41 1.41L11 7.83V16h1z"/></svg>
+            Browse file
+          </label>
+          <input id="file" type="file" accept="application/json,text/plain,.rpgsave" />
+          <div class="help">Backups made here use JSON. You can also import/export native <span class="mono">.rpgsave</span> files.</div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button id="btn-apply" class="btn good" disabled>Write To localStorage</button>
+          <button id="btn-clear-preview" class="btn" disabled>Clear Preview</button>
+          <div class="spacer"></div>
+          <span id="importBadge" class="badge">No file</span>
+        </div>
+
+        <h3 style="margin:14px 0 8px">Or paste backup text</h3>
+        <textarea id="paste" class="codebox" rows="8" placeholder='Paste backup JSON (or raw Base64/text) here…'></textarea>
+        <div class="row" style="margin-top:8px">
+          <button id="btn-parse-paste" class="btn">Preview From Text</button>
+        </div>
+
+        <div id="preview" style="display:none;margin-top:14px">
+          <div class="help">Preview of keys that will be written. Existing keys will be overwritten.</div>
+          <div id="previewList" class="klist"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- EXPORT AREA -->
+    <section class="card" style="margin-top:16px">
+      <h2 style="margin:0 0 6px 0">Create Backup</h2>
+      <div class="help">Export selected keys to JSON or download native <span class="mono">.rpgsave</span> file(s).</div>
+      <div class="row" style="margin-top:6px">
+        <button id="btn-download" class="btn primary" disabled>Download JSON</button>
+        <button id="btn-copy" class="btn" disabled>Copy As Text</button>
+        <button id="btn-download-rpgsave" class="btn" disabled>Download .rpgsave</button>
+        <div class="spacer"></div>
+        <span id="exportBadge" class="badge">Nothing selected</span>
+      </div>
+    </section>
+
+    <p class="foot">Tip: Run this on the same site/origin where the game runs so the save keys appear. All operations happen locally in your browser.</p>
+
+      <!-- CLOUD SYNC -->
+    <section class="card" style="margin-top:16px">
+      <h2>Cloud Sync</h2>
+      <div class="help">Save to your Cloudflare Worker, restore on another device.</div>
+      <div class="row" style="margin-top:6px">
+        <input type="text" id="cloudUser" placeholder="Username" />
+        <input type="password" id="cloudPass" placeholder="Password" />
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="btn-upload-cloud" class="btn primary">Upload to Cloud</button>
+        <button id="btn-download-cloud" class="btn">Download from Cloud</button>
+        <div class="spacer"></div>
+        <span id="cloudBadge" class="badge">Idle</span>
+      </div>
+    </section>
+
+
+  <!-- EMBEDDED LZString LIBRARY -->
+  <script>
+  /* LZ-String (embedded, MIT License)
+     https://github.com/pieroxy/lz-string */
+  var LZString=function(){function o(o,r){if(!t[o]){t[o]={};for(var n=0;n<o.length;n++)t[o][o.charAt(n)]=n}return t[o][r]}var r=String.fromCharCode,n="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=",e="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$",t={},i={compressToBase64:function(o){if(null==o)return"";var r=i._compress(o,6,function(o){return n.charAt(o)});switch(r.length%4){default:case 0:return r;case 1:return r+"===";case 2:return r+"==";case 3:return r+"="}},decompressFromBase64:function(r){return null==r?"":""==r?null:i._decompress(r.length,32,function(e){return o(n,r.charAt(e))})},compressToUTF16:function(o){return null==o?"":i._compress(o,15,function(o){return r(o+32)})+" "},decompressFromUTF16:function(o){return null==o?"":""==o?null:i._decompress(o.length,16384,function(r){return o.charCodeAt(r)-32})},compressToUint8Array:function(o){for(var r=i.compress(o),n=new Uint8Array(2*r.length),e=0,t=r.length;t>e;e++){var s=r.charCodeAt(e);n[2*e]=s>>>8,n[2*e+1]=s%256}return n},decompressFromUint8Array:function(o){if(null===o||void 0===o)return i.decompress(o);for(var n=new Array(o.length/2),e=0,t=n.length;t>e;e++)n[e]=256*o[2*e]+o[2*e+1];var s=[];return n.forEach(function(o){s.push(r(o))}),i.decompress(s.join(""))},compressToEncodedURIComponent:function(o){return null==o?"":i._compress(o,6,function(o){return e.charAt(o)})},decompressFromEncodedURIComponent:function(r){return null==r?"":""==r?null:(r=r.replace(/ /g,"+"),i._decompress(r.length,32,function(n){return o(e,r.charAt(n))}))},compress:function(o){return i._compress(o,16,function(o){return r(o)})},_compress:function(o,r,n){if(null==o)return"";var e,t,i={},s={},p="",u="",c="",a=2,f=3,l=2,h=[],d=0,v=0;for(t=0;t<o.length;t+=1)if(p=o.charAt(t),Object.prototype.hasOwnProperty.call(i,p)||(i[p]=f++,s[p]=!0),u=c+p,Object.prototype.hasOwnProperty.call(i,u))c=u;else{if(Object.prototype.hasOwnProperty.call(s,c)){if(c.charCodeAt(0)<256){for(e=0;e<l;e++)d<<=1,v==r-1?(v=0,h.push(n(d)),d=0):v++;for(t=0;t<8;t++)d=d<<1|c.charCodeAt(0)&1,v==r-1?(v=0,h.push(n(d)),d=0):v++,c=c.charCodeAt(0)>>1}else{for(e=0;e<l;e++)d=d<<1|1,v==r-1?(v=0,h.push(n(d)),d=0):v++;for(t=0;t<16;t++)d=d<<1|c.charCodeAt(0)&1,v==r-1?(v=0,h.push(n(d)),d=0):v++,c=c.charCodeAt(0)>>1}f<=a?a++:0,s[c]=!1}else for(t=0;t<l;t++)d=d<<1|i[c]&1,v==r-1?(v=0,h.push(n(d)),d=0):v++,i[c]=i[c]>>1;--a,0==a&&(a=Math.pow(2,l),l++),i[u]=f++,c=String(p)}if(""!==c){if(Object.prototype.hasOwnProperty.call(s,c)){if(c.charCodeAt(0)<256){for(e=0;e<l;e++)d<<=1,v==r-1?(v=0,h.push(n(d)),d=0):v++;for(t=0;t<8;t++)d=d<<1|c.charCodeAt(0)&1,v==r-1?(v=0,h.push(n(d)),d=0):v++,c=c.charCodeAt(0)>>1}else{for(e=0;e<l;e++)d=d<<1|1,v==r-1?(v=0,h.push(n(d)),d=0):v++;for(t=0;t<16;t++)d=d<<1|c.charCodeAt(0)&1,v==r-1?(v=0,h.push(n(d)),d=0):v++,c=c.charCodeAt(0)>>1}f<=a?a++:0,s[c]=!1}else for(t=0;t<l;t++)d=d<<1|i[c]&1,v==r-1?(v=0,h.push(n(d)),d=0):v++,i[c]=i[c]>>1}for(;;){if(d<<=1,v==r-1){h.push(n(d));break}v++}return h.join("")},decompress:function(o){return null==o?"":""==o?null:i._decompress(o.length,32768,function(r){return o.charCodeAt(r)})},_decompress:function(o,n,e){var t,i,s,p,u,c,a,f,l=[],h=4,d=4,v=3,g="",y=[],m={val:e(0),position:n,index:1};for(i=0;3>i;i+=1)l[i]=i;for(p=0,u=Math.pow(2,2),c=1;c!=u;)a=m.val&m.position,m.position>>=1,0==m.position&&(m.position=n,m.val=e(m.index++)),p|=(a>0?1:0)*c,c<<=1;switch(t=p){case 0:for(p=0,u=Math.pow(2,8),c=1;c!=u;)a=m.val&m.position,m.position>>=1,0==m.position&&(m.position=n,m.val=e(m.index++)),p|=(a>0?1:0)*c,c<<=1;l[3]=r(p),t=3;break;case 1:for(p=0,u=Math.pow(2,16),c=1;c!=u;)a=m.val&m.position,m.position>>=1,0==m.position&&(m.position=n,m.val=e(m.index++)),p|=(a>0?1:0)*c,c<<=1;l[3]=r(p),t=3;break;case 2:return""}for(f=g=l[t],y.push(l[t]);;){if(m.index>o)return"";for(p=0,u=Math.pow(2,v),c=1;c!=u;)a=m.val&m.position,m.position>>=1,0==m.position&&(m.position=n,m.val=e(m.index++)),p|=(a>0?1:0)*c,c<<=1;switch(s=p){case 0:for(p=0,u=Math.pow(2,8),c=1;c!=u;)a=m.val&m.position,m.position>>=1,0==m.position&&(m.position=n,m.val=e(m.index++)),p|=(a>0?1:0)*c,c<<=1;l[d++]=r(p),s=d-1,h--;break;case 1:for(p=0,u=Math.pow(2,16),c=1;c!=u;)a=m.val&m.position,m.position>>=1,0==m.position&&(m.position=n,m.val=e(m.index++)),p|=(a>0?1:0)*c,c<<=1;l[d++]=r(p),s=d-1,h--;break;case 2:return y.join("")}if(0==h&&(h=Math.pow(2,v),v++),l[s])f=l[s];else{if(s!==d)return null;f=g+g.charAt(0)}y.push(f),l[d++]=g+f.charAt(0),h--,g=f,0==h&&(h=Math.pow(2,v),v++)}}};return i}();
+  </script>
+  <script>
+  // ==== Utility functions ====
+  const $ = sel => document.querySelector(sel);
+  function bytes(n){return n<1024?n+" B":(n/1024).toFixed(1)+" KB";}
+  function badge(el,text,type){el.textContent=text;el.className="badge"+(type?" "+type:"");}
+  function isProbablyBase64(str){try{atob(str.slice(0,20));return true;}catch(e){return false;}}
+  function downloadBlob(blob,filename){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;a.click();}
+  function keyToSlot(key){let m=key.match(/RPG\s*File(\d+)/i);if(m)return parseInt(m[1]);return null;}
+  function filenameForKey(key){let s=keyToSlot(key);if(s)return `file${s}.rpgsave`;if(/global/i.test(key))return "global.rpgsave";return key.replace(/\W+/g,'_')+".rpgsave";}
+
+  // ==== State ====
+  let ALL_KEYS=[], selected=new Set(), previewData=null;
+
+  // ==== Rendering ====
+  function renderKeys(){
+    const tb=$("#keyTable"); tb.innerHTML="";
+    const chips=$("#keyChips"); chips.innerHTML="";
+    ALL_KEYS.forEach(r=>{
+      let tr=document.createElement("tr");
+      tr.innerHTML=`<td>${r.key}</td><td>${bytes(r.size)}</td><td>${r.type}</td>`;
+      let td=document.createElement("td");
+      let cb=document.createElement("input");
+      cb.type="checkbox"; cb.checked=/RPG/i.test(r.key);
+      if(cb.checked)selected.add(r.key);
+      cb.onchange=()=>{if(cb.checked)selected.add(r.key);else selected.delete(r.key);updateButtons();};
+      td.appendChild(cb); tr.appendChild(td); tb.appendChild(tr);
+
+      let chip=document.createElement("div");
+      chip.className="chip"; chip.innerHTML=`<strong>${r.key}</strong> • ${bytes(r.size)}`;
+      chips.appendChild(chip);
+    });
+    updateButtons();
+  }
+  function updateButtons(){
+    let c=selected.size;
+    $("#btn-download").disabled=!c;
+    $("#btn-copy").disabled=!c;
+    $("#btn-download-rpgsave").disabled=!c;
+    badge($("#exportBadge"),c?c+" selected":"Nothing selected",c?"ok":"bad");
+  }
+
+  // ==== Scan ====
+  function rescan(){
+    ALL_KEYS=[];
+    for(let i=0;i<localStorage.length;i++){
+      let k=localStorage.key(i),v=localStorage.getItem(k);
+      ALL_KEYS.push({key:k,value:v,size:v.length,type:isProbablyBase64(v)?"Base64":"Text"});
+    }
+    selected.clear(); renderKeys();
+    badge($("#scanBadge"),ALL_KEYS.length+" keys","ok");
+  }
+
+  // ==== Export ====
+  function exportJson(){
+    let obj={}; ALL_KEYS.filter(r=>selected.has(r.key)).forEach(r=>obj[r.key]=r.value);
+    downloadBlob(new Blob([JSON.stringify(obj)],{type:"application/json"}),"saves.json");
+  }
+  function copyJson(){
+    let obj={}; ALL_KEYS.filter(r=>selected.has(r.key)).forEach(r=>obj[r.key]=r.value);
+    navigator.clipboard.writeText(JSON.stringify(obj));
+  }
+  function exportRpgsave(){
+    const rows = ALL_KEYS.filter(r => selected.has(r.key));
+    if (!rows.length) return;
+    rows.forEach(r => {
+      let raw = r.value;
+      let out;
+      if (isProbablyBase64(raw)) {
+        // already compressed save (as in EXE)
+        out = raw;
+      } else {
+        // looks like JSON, compress it
+        out = LZString.compressToBase64(raw);
+      }
+      const blob = new Blob([out], {type:"application/octet-stream"});
+      downloadBlob(blob, filenameForKey(r.key));
+    });
+    badge($("#exportBadge"), "Exported .rpgsave", "ok");
+  }
+
+
+  // ==== Import / Preview ====
+  function previewFromObject(obj){
+    previewData=obj;
+    const pl=$("#previewList"); pl.innerHTML="";
+    for(const k in obj){
+      let chip=document.createElement("div"); chip.className="chip";
+      chip.innerHTML=`<strong>${k}</strong> • ${bytes(obj[k].length)}`;
+      pl.appendChild(chip);
+    }
+    $("#preview").style.display="block";
+    $("#btn-apply").disabled=false;
+    $("#btn-clear-preview").disabled=false;
+    badge($("#importBadge"),Object.keys(obj).length+" ready","ok");
+  }
+  function applyPreview(){
+    if(!previewData)return;
+    for(const k in previewData)localStorage.setItem(k,previewData[k]);
+    rescan(); clearPreview();
+    badge($("#importBadge"),"Applied","ok");
+  }
+  function clearPreview(){
+    previewData=null;
+    $("#preview").style.display="none";
+    $("#btn-apply").disabled=true;
+    $("#btn-clear-preview").disabled=true;
+    badge($("#importBadge"),"No file","bad");
+  }
+
+  // ==== File input ====
+  $("#file").onchange=e=>{
+    const f=e.target.files[0]; if(!f)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      let txt=ev.target.result;
+      if(f.name.endsWith(".rpgsave")){
+        // .rpgsave is Base64 compressed
+        previewFromObject({[f.name.replace(/\.rpgsave$/,"")]:txt});
+      }else{
+        try{previewFromObject(JSON.parse(txt));}
+        catch{alert("Invalid JSON");}
+      }
+    };
+    reader.readAsText(f);
+  };
+
+    // ==== Cloud Sync ====
+  function getAuthHeader() {
+    const u = document.getElementById("cloudUser").value.trim();
+    const p = document.getElementById("cloudPass").value.trim();
+    return "Basic " + btoa(u + ":" + p);
+  }
+
+  document.getElementById("btn-upload-cloud").onclick = async () => {
+    try {
+      const payload = {};
+      ALL_KEYS.filter(r => selected.has(r.key))
+              .forEach(r => payload[r.key] = r.value);
+
+      const res = await fetch("https://cl.howcome.dpdns.org/save/upload", {
+        method: "POST",
+        headers: {
+          "Authorization": getAuthHeader(),
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        badge(document.getElementById("cloudBadge"), "Uploaded", "ok");
+      } else {
+        badge(document.getElementById("cloudBadge"), "Upload failed", "bad");
+      }
+    } catch (e) {
+      console.error(e);
+      badge(document.getElementById("cloudBadge"), "Error", "bad");
+    }
+  };
+
+  document.getElementById("btn-download-cloud").onclick = async () => {
+    try {
+      const res = await fetch("https://cl.howcome.dpdns.org/save/download", {
+        headers: { "Authorization": getAuthHeader() }
+      });
+
+      if (!res.ok) {
+        badge(document.getElementById("cloudBadge"), "No save", "bad");
+        return;
+      }
+
+      const obj = await res.json();
+      for (const k in obj) {
+        localStorage.setItem(k, obj[k]);
+      }
+      rescan();
+      badge(document.getElementById("cloudBadge"), "Restored", "ok");
+    } catch (e) {
+      console.error(e);
+      badge(document.getElementById("cloudBadge"), "Error", "bad");
+    }
+  };
+
+
+  // ==== Drag-drop ====
+  const drop=$("#drop");
+  drop.ondragover=e=>{e.preventDefault();drop.classList.add("drag");};
+  drop.ondragleave=()=>drop.classList.remove("drag");
+  drop.ondrop=e=>{
+    e.preventDefault();drop.classList.remove("drag");
+    const f=e.dataTransfer.files[0]; if(f)$("#file").files=e.dataTransfer.files,$("#file").onchange({target:{files:[f]}});
+  };
+
+  // ==== Paste box ====
+  $("#btn-parse-paste").onclick=()=>{
+    let txt=$("#paste").value.trim();
+    if(!txt)return;
+    try{previewFromObject(JSON.parse(txt));}
+    catch{previewFromObject({"pasted":txt});}
+  };
+
+  // ==== Button hookups ====
+  $("#btn-scan").onclick=rescan;
+  $("#btn-download").onclick=exportJson;
+  $("#btn-copy").onclick=copyJson;
+  $("#btn-download-rpgsave").onclick=exportRpgsave;
+  $("#btn-apply").onclick=applyPreview;
+  $("#btn-clear-preview").onclick=clearPreview;
+  $("#btn-toggle-all").onclick=()=>{
+    if(selected.size<ALL_KEYS.length)ALL_KEYS.forEach(r=>selected.add(r.key));
+    else selected.clear(); renderKeys();
+  };
+  $("#btn-delete-selected").onclick=()=>{
+    if(confirm("Delete selected keys from localStorage?")){
+      ALL_KEYS.filter(r=>selected.has(r.key)).forEach(r=>localStorage.removeItem(r.key));
+      rescan();
+    }
+  };
+
+  rescan(); // initial
+  </script>
+</body>
+</html>
+
